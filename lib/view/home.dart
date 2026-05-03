@@ -5,60 +5,75 @@ import 'package:myprogect/view/my_page.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
-  /*
-  int? seq;
-  String detail;
-  String? date;
-  String? lastdate;
-  String addDetail;
-  String import;
 
-
-
-*/
   @override
   State<Home> createState() => _HomeState();
 }
 
-class _HomeState extends State<Home> with SingleTickerProviderStateMixin {
-  late TabController controller;
-
-  @override
-  void initState() {
-    super.initState();
-    controller = TabController(length: 3, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    controller.dispose();
-
-    super.dispose();
-  }
+class _HomeState extends State<Home> {
+  int selectedIndex = 0;
+  int mainRefreshToken = 0;
+  int calendarRefreshToken = 0;
+  int reportRefreshToken = 0;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: TabBarView(
-        controller: controller,
-        children: [MainPage(), CalendarPage(), MyPage()],
-      ),
-      bottomNavigationBar: Container(
-        color: Theme.of(context).colorScheme.primaryContainer,
-        height: 80,
-        child: TabBar(
-          controller: controller,
-          labelColor: Colors.amber,
-          indicatorColor: Colors.red,
-          indicatorWeight: 5,
+    final pages = [
+      MainPage(refreshToken: mainRefreshToken),
+      CalendarPage(refreshToken: calendarRefreshToken),
+      MyPage(refreshToken: reportRefreshToken),
+    ];
 
-          tabs: [
-            Tab(icon: Icon(Icons.add), text: "Work"),
-            Tab(icon: Icon(Icons.calendar_month_outlined), text: "Calendar"),
-            Tab(icon: Icon(Icons.face), text: "Mypage"),
-          ],
+    return Scaffold(
+      body: IndexedStack(index: selectedIndex, children: pages),
+      bottomNavigationBar: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: NavigationBar(
+              height: 72,
+              selectedIndex: selectedIndex,
+              backgroundColor: Colors.white,
+              indicatorColor: const Color(0xFFEFF6FF),
+              elevation: 0,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              onDestinationSelected: (index) {
+                setState(() {
+                  selectedIndex = index;
+                  if (index == 0) {
+                    mainRefreshToken++;
+                  }
+                  if (index == 1) {
+                    calendarRefreshToken++;
+                  }
+                  if (index == 2) {
+                    reportRefreshToken++;
+                  }
+                });
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.checklist_rounded),
+                  selectedIcon: Icon(Icons.checklist_rounded),
+                  label: '할 일',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.calendar_month_outlined),
+                  selectedIcon: Icon(Icons.calendar_month_rounded),
+                  label: '캘린더',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.insights_outlined),
+                  selectedIcon: Icon(Icons.insights_rounded),
+                  label: '리포트',
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
-  } //build
-} //class
+  }
+}

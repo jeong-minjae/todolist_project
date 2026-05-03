@@ -3,8 +3,12 @@ import 'package:get/get.dart';
 import 'package:myprogect/model/todolist.dart';
 import 'package:myprogect/vm/database_handler.dart';
 
+const List<String> priorityOptions = ['\uC0C1', '\uC911', '\uD558'];
+
 class UpdateDetail extends StatefulWidget {
-  const UpdateDetail({super.key});
+  const UpdateDetail({super.key, this.todo});
+
+  final Todolist? todo;
 
   @override
   State<UpdateDetail> createState() => _UpdateDetailState();
@@ -12,100 +16,156 @@ class UpdateDetail extends StatefulWidget {
 
 class _UpdateDetailState extends State<UpdateDetail> {
   late DatabaseHandler handler;
-  late TextEditingController detailcontroller;
-  late TextEditingController adddetailcontroller;
-  late TextEditingController importcontroller;
-  late TextEditingController lastdatecontroller;
+  late TextEditingController detailController;
+  late TextEditingController memoController;
+  late TextEditingController priorityController;
 
-  var value = Get.arguments ?? "__";
+  late final Todolist todo;
+
   @override
   void initState() {
     super.initState();
-    detailcontroller = TextEditingController();
-    lastdatecontroller = TextEditingController();
-    adddetailcontroller = TextEditingController();
-    importcontroller = TextEditingController();
+    todo = widget.todo ?? _todoFromLegacyArguments();
+    detailController = TextEditingController(text: todo.detail);
+    memoController = TextEditingController(text: todo.addDetail);
+    priorityController = TextEditingController(text: todo.import);
     handler = DatabaseHandler();
+  }
 
-    detailcontroller.text = value[0];
-    lastdatecontroller.text = value[1];
-    adddetailcontroller.text = value[2];
-    importcontroller.text = value[3];
+  @override
+  void dispose() {
+    detailController.dispose();
+    memoController.dispose();
+    priorityController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-      appBar: AppBar(title: Text("작업사항 수정"),
-       backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-       ),
-
-      body: Center(
-        child: Column(
-          children: [
-            TextField(
-              controller: detailcontroller,
-              decoration: InputDecoration(labelText: "작업 수정"),
+      appBar: AppBar(title: const Text('할 일 수정')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(color: const Color(0xFFE5E7EB)),
             ),
-            TextField(
-              controller: lastdatecontroller,
-              decoration: InputDecoration(labelText: "마감일 수정"),
+            child: Column(
+              children: [
+                TextField(
+                  controller: detailController,
+                  decoration: const InputDecoration(
+                    labelText: '할 일',
+                    prefixIcon: Icon(Icons.edit_note_rounded),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _PriorityField(controller: priorityController),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: memoController,
+                  maxLines: 5,
+                  decoration: const InputDecoration(
+                    labelText: '메모',
+                    prefixIcon: Icon(Icons.notes_rounded),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: updateAction,
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('변경사항 저장'),
+                  ),
+                ),
+              ],
             ),
-            TextField(
-              controller: adddetailcontroller,
-              decoration: InputDecoration(labelText: "추가내용 수정"),
-            ),
-            TextField(
-              controller: importcontroller,
-              decoration: InputDecoration(labelText: "중요도 수정"),
-            ),
-
-            ElevatedButton(
-              onPressed: () {
-                updateAction();
-              },
-              child: Text("수정"),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
-  } //build
+  }
 
-  Future updateAction() async {
-    //File Type Byte Type으로 변환하기
+  Future<void> updateAction() async {
+    if (detailController.text.trim().isEmpty) {
+      Get.snackbar('입력 필요', '할 일을 입력해주세요.');
+      return;
+    }
 
-    var todolistUpdate = Todolist(
-      seq: value[4],
-      detail: detailcontroller.text,
-      lastdate: lastdatecontroller.text,
-      addDetail: adddetailcontroller.text,
-      import: importcontroller.text,
+    final todolistUpdate = Todolist(
+      seq: todo.seq,
+      detail: detailController.text.trim(),
+      date: todo.date,
+      addDetail: memoController.text.trim(),
+      import: priorityController.text.trim(),
+      ischeck: todo.ischeck,
+      sortOrder: todo.sortOrder,
     );
-
-    int check = await handler.updateTodolist(todolistUpdate);
-    if (check == 0) {
-      //Error
-    } else {
-      _showDialog();
+    try {
+      final check = await handler.updateTodolist(todolistUpdate);
+      if (check != 0) {
+        Get.back();
+        Get.snackbar('저장 완료', '수정한 내용이 반영되었습니다.');
+      }
+    } catch (error) {
+      Get.snackbar('저장 실패', error.toString());
     }
   }
 
-  _showDialog() {
-    Get.defaultDialog(
-      title: '입력결과',
-      middleText: '입력이 완료되었습니다',
-      barrierDismissible: false,
-      actions: [
-        TextButton(
-          onPressed: () {
-            Get.back();
-            Get.back();
-          },
-          child: Text("OK"),
-        ),
-      ],
+  Todolist _todoFromLegacyArguments() {
+    final value = Get.arguments;
+    if (value is List && value.length >= 5) {
+      return Todolist(
+        detail: value[0] ?? '',
+        addDetail: value[2] ?? '',
+        import: value[3] ?? '',
+        seq: value[4],
+        date: value.length > 5 ? value[5] : null,
+        ischeck: value.length > 6 ? value[6] : 0,
+        sortOrder: value.length > 7 ? value[7] : null,
+      );
+    }
+
+    return Todolist(detail: '', addDetail: '', import: '');
+  }
+}
+
+class _PriorityField extends StatelessWidget {
+  const _PriorityField({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    return InputDecorator(
+      decoration: const InputDecoration(
+        labelText: '\uC911\uC694\uB3C4',
+        prefixIcon: Icon(Icons.priority_high_rounded),
+      ),
+      child: StatefulBuilder(
+        builder: (context, setState) {
+          return Wrap(
+            spacing: 8,
+            children: priorityOptions.map((priority) {
+              final selected = controller.text == priority;
+              return ChoiceChip(
+                label: Text(priority),
+                selected: selected,
+                onSelected: (_) {
+                  setState(() {
+                    controller.text = priority;
+                  });
+                },
+              );
+            }).toList(),
+          );
+        },
+      ),
     );
   }
-}//class
+}

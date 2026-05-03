@@ -51,9 +51,6 @@ dependencies:
   # Image picker :album&camera
   image_picker: ^1.2.1
 
-  #flutter slidable for delete
-  flutter_slidable: ^4.0.3
-
 dev_dependencies:
   flutter_test:
     sdk: flutter

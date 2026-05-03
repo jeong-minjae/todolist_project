@@ -2,173 +2,110 @@ import 'package:myprogect/model/todolist.dart';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 
-
-/*
-  int? seq;
-  String detail;
-  String? date;
-  String? lastdate;
-  String addDetail;
-  String import;
-
-
-
-*/
-
 class DatabaseHandler {
-  //테이블 만들기
-  Future<Database>initalizeDB() async{
-    String path=await getDatabasesPath();
+  static const _dbName = 'todolist_clean.db';
+  static const _dbVersion = 1;
+  static Database? _database;
 
-    return openDatabase(
-      
-       join(path,"todolist.db"),
-       onCreate: (db, version)async {
-         await db.execute(
-          """
+  Future<Database> initalizeDB() async {
+    if (_database != null) return _database!;
+
+    final path = await getDatabasesPath();
+
+    _database = await openDatabase(
+      join(path, _dbName),
+      version: _dbVersion,
+      onCreate: (db, version) async {
+        await db.execute('''
           create table todolist(
-          seq integer primary key autoincrement,
-          detail text,
-          date date,
-          lastdate date,
-          addDetail text,
-          import text,
-          ischeck integer  
+            seq integer primary key autoincrement,
+            detail text not null,
+            date text,
+            addDetail text not null,
+            import text not null,
+            ischeck integer not null default 0,
+            sortOrder integer
           )
+        ''');
+      },
+    );
 
-          """
-         );
-       }, 
-         version: 1,
+    return _database!;
+  }
 
+  Future<List<Todolist>> queryTodolist() async {
+    final db = await initalizeDB();
+    final queryResult = await db.query(
+      'todolist',
+      orderBy: 'substr(date, 1, 10) asc, coalesce(sortOrder, seq) asc, seq asc',
+    );
+
+    return queryResult.map((e) => Todolist.fromMap(e)).toList();
+  }
+
+  Future<int> insertTodolist(Todolist todolist) async {
+    final db = await initalizeDB();
+    final result = await db.insert('todolist', {
+      'detail': todolist.detail,
+      'date': todolist.date,
+      'addDetail': todolist.addDetail,
+      'import': todolist.import,
+      'ischeck': todolist.ischeck ?? 0,
+      'sortOrder': todolist.sortOrder,
+    });
+
+    if (todolist.sortOrder == null) {
+      await db.update(
+        'todolist',
+        {'sortOrder': result},
+        where: 'seq = ?',
+        whereArgs: [result],
+      );
+    }
+
+    return result;
+  }
+
+  Future<int> updateTodolist(Todolist todolist) async {
+    if (todolist.seq == null) return 0;
+
+    final db = await initalizeDB();
+    return db.update(
+      'todolist',
+      {
+        'detail': todolist.detail,
+        'date': todolist.date,
+        'addDetail': todolist.addDetail,
+        'import': todolist.import,
+        'ischeck': todolist.ischeck ?? 0,
+        'sortOrder': todolist.sortOrder,
+      },
+      where: 'seq = ?',
+      whereArgs: [todolist.seq],
     );
   }
-  //테이블 불러오기 날짜 순서대로 정리
-   Future<List<Todolist>> queryTodolist()async{
-    final Database db =await initalizeDB();
-    final List<Map<String,Object?>> queryResult =await db.rawQuery(
-      """
-      select *from todolist
-      order by date asc
-      """
-    );
-      return queryResult.map((e) => Todolist.fromMap(e)).toList();
-   }
-   //테이블 마감날짜 순서대로 정리
- Future<List<Todolist>> queryTodolistlastdate()async{
-    final Database db =await initalizeDB();
-    final List<Map<String,Object?>> queryResult =await db.rawQuery(
-      """
-      select *from todolist
-      order by lastdate asc
-      """
-    );
-      return queryResult.map((e) => Todolist.fromMap(e)).toList();
-   }
-//날짜에 따리 출력 마감일자로 정리
 
-  //완료횟수 카운트 그래프에 쓸거임
-  Future<List<Todolist>> queryTodolistcheck()async{
-    final Database db =await initalizeDB();
-    final List<Map<String,Object?>> queryResult =await db.rawQuery(
-      """
-     SELECT 
-      seq,
-      detail,
-      addDetail,
-      import,
-      lastdate,
-      substr(date, 1, 10) AS date,
-      SUM(ischeck) AS ischeck
-    FROM todolist
-    GROUP BY substr(date, 1, 10)
-    ORDER BY date
-      
-       
-      """
-    );
-      return queryResult.map((e) => Todolist.fromMap(e)).toList();
-   }
+  Future<void> deleteTodolist(int seq) async {
+    final db = await initalizeDB();
+    await db.delete('todolist', where: 'seq = ?', whereArgs: [seq]);
+  }
 
-   //내가 입력한 데이터 테이블에 삽입
-   Future<int> insertTodolist(Todolist todolist) async{
-    int result=0;
-    final Database db =await initalizeDB();
-    result=await db.rawInsert(
-      """
-      insert into todolist
-      (detail,date,addDetail,lastdate,import,ischeck)
-      values
-      (?,?,?,?,?,?)
-      """,
-      [
-        todolist.detail,
-        todolist.date,
-        todolist.addDetail,
-        todolist.lastdate,
-        todolist.import,
-        todolist.ischeck
-      
-      
-      ]
-    );
-    return result;
-   }
-  //입력한데이터 수정 
-   Future<int> updateTodolist(Todolist todolist)async{
-      int result=0;
-      final Database db = await initalizeDB();
-      result = await db.rawUpdate( //여기 부분만 있으면된다
-        """
-        update todolist
-        set detail=?,lastdate=?,addDetail=?,import=?,ischeck=?
-        where seq=?
+  Future<void> updateTodoOrder(List<Todolist> todolists) async {
+    final db = await initalizeDB();
+    final batch = db.batch();
 
-        """,
-      [
-        todolist.detail,
-        todolist.lastdate,
-        todolist.addDetail,
-        todolist.import,
-        todolist.ischeck,
-        todolist.seq,
+    for (var i = 0; i < todolists.length; i++) {
+      final seq = todolists[i].seq;
+      if (seq == null) continue;
 
-
-      ]
+      batch.update(
+        'todolist',
+        {'sortOrder': i + 1},
+        where: 'seq = ?',
+        whereArgs: [seq],
       );
-   
+    }
 
-      return result;
-
+    await batch.commit(noResult: true);
+  }
 }
-
-
- //입력한 데이터 삭제
-Future<void> deleteTodolist(int seq)async{
-      
-      final Database db = await initalizeDB();
-       await db.rawUpdate( //여기 부분만 있으면된다
-        """
-        delete from todolist
-        where seq=?
-
-        """,
-      [seq]
-      );
-     
-      
-
-  //삭제
-}
-}
-/*
-  int? seq;
-  String detail;
-  String? date;
-  String? lastdate;
-  String addDetail;
-  String import;
-
-
-
-*/
